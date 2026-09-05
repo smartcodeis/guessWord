@@ -263,13 +263,8 @@ export class Game {
                 break;
 
 
-            case "hint":
-
-                this.showHint = true;
-
-                this.update();
-
-                break;
+            // Hint is now LOCAL ONLY — no network message needed.
+            // The opponent's hint was already received in player-ready.
 
 
             case "play-again":
@@ -282,6 +277,24 @@ export class Game {
             case "game-over":
 
                 this.handleGameOver(
+                    message
+                );
+
+                break;
+
+
+            case "guesser-lost":
+
+                this.handleGuesserLost(
+                    message
+                );
+
+                break;
+
+
+            case "word-reveal":
+
+                this.handleWordReveal(
                     message
                 );
 
@@ -389,61 +402,42 @@ export class Game {
 
         if (exists) {
 
-            const allPositions =
-                this.getAllGuessedPositionsForWord(
-                    letter
-                );
-
-
-            /*
-             * We only need to check whether
-             * this latest guess reveals the
-             * last missing letter.
-             *
-             * Since the opponent's previous
-             * guessed letters are not sent to us,
-             * we determine completion using the
-             * message sequence indirectly:
-             *
-             * Every unique correct letter can be
-             * tracked locally by the defender.
-             */
-
             this.trackOpponentCorrectLetter(
                 letter
             );
 
+            if (this.isOpponentWordSolved()) {
+                const opponentId = this.playerId === "player1" ? "player2" : "player1";
 
-            if (
-                this.isOpponentWordSolved()
-            ) {
+                // Opponent finished guessing our word
+                this.opponentFinished = true;
+                this.opponentWon = true;
+
+                // It is now my turn permanently
+                this.currentTurn = this.playerId;
 
                 this.send({
-
-                    type: "game-over",
-
-                    winner:
-                        this.playerId === "player1"
-                            ? "player2"
-                            : "player1",
-
-                    word:
-                        this.secret
+                    type: "turn-change",
+                    player: this.playerId
                 });
 
-
-                this.gameOver = true;
-
-                this.gameStarted = false;
-
-                this.onFinish({
-
-                    won: false,
-
+                this.send({
+                    type: "game-over",
+                    winner: opponentId,
                     word: this.secret
                 });
 
+                // If I am already finished, my modal needs updating
+                if (this.gameOver) {
+                    this.onFinish({
+                        won: this.iWon,
+                        opponentWon: true,
+                        myWord: this.secret,
+                        opponentWord: this.opponentRevealedWord || null
+                    });
+                }
 
+                this.update();
                 return;
             }
         }
@@ -608,47 +602,22 @@ export class Game {
         }
 
 
-        /*
-         * Ten wrong guesses = lose.
-         */
+        if (this.wrongLetters.length >= 10) {
 
-        if (
-            this.wrongLetters.length >= 10
-        ) {
-
-            /*
-             * The guesser (me) lost.
-             *
-             * Tell the opponent (who holds the secret)
-             * that they won. The opponent will respond
-             * with game-over containing their secret word.
-             */
+            this.gameOver = true;
+            this.iWon = false;
 
             this.send({
-
-                type: "game-over",
-
-                winner:
-                    this.playerId === "player1"
-                        ? "player2"
-                        : "player1",
-
+                type: "guesser-lost",
                 word: null
             });
 
-
-            this.gameOver = true;
-
-            this.gameStarted = false;
-
-
             this.onFinish({
-
                 won: false,
-
-                word: null   // we don't know it yet
+                opponentWon: this.opponentWon,
+                myWord: this.secret,
+                opponentWord: this.opponentRevealedWord || null
             });
-
 
             return;
         }
@@ -660,10 +629,11 @@ export class Game {
 
     changeTurn() {
 
-        this.currentTurn =
-            this.playerId === "player1"
-                ? "player2"
-                : "player1";
+        if (this.opponentFinished) {
+            this.currentTurn = this.playerId;
+        } else {
+            this.currentTurn = this.playerId === "player1" ? "player2" : "player1";
+        }
 
 
         this.send({
@@ -681,84 +651,66 @@ export class Game {
 
     handleGameOver(message) {
 
-        const won =
-            message.winner === this.playerId;
-
-
-        /*
-         * If the defender receives a game-over
-         * saying the guesser lost (their own
-         * secret word was not found),
-         * the defender must reveal the secret word.
-         */
-
-        if (!this.gameOver && !won && this.secret) {
-
-            // Guesser lost: we are the defender.
-            // Send back game-over with the real word.
-
-            this.gameOver = true;
-
-            this.gameStarted = false;
-
-            this.send({
-
-                type: "game-over",
-
-                winner: message.winner,
-
-                word: this.secret
-            });
-
-
-            this.onFinish({
-
-                won: true,
-
-                word: this.secret
-            });
-
-
-            this.update();
-
-            return;
-        }
-
-
-        /*
-         * If we already ended locally (guesser side),
-         * now we receive the word from the defender.
-         */
-
-        if (this.gameOver) {
-
-            // Update the game-over display with the word
-            if (message.word) {
-                this.onFinish({
-                    won: false,
-                    word: message.word
-                });
-            }
-
-            return;
-        }
-
-
         this.gameOver = true;
+        this.iWon = true;
 
-        this.gameStarted = false;
-
+        if (message.word) {
+            this.opponentRevealedWord = message.word;
+        }
 
         this.onFinish({
-
-            won,
-
-            word:
-                message.word || null
+            won: true,
+            opponentWon: this.opponentWon,
+            myWord: this.secret,
+            opponentWord: this.opponentRevealedWord
         });
 
+        this.update();
+    }
+
+
+    handleGuesserLost(message) {
+
+        this.opponentFinished = true;
+        this.opponentWon = false;
+
+        this.currentTurn = this.playerId;
+
+        this.send({
+            type: "turn-change",
+            player: this.playerId
+        });
+
+        this.send({
+            type: "word-reveal",
+            word: this.secret
+        });
+
+        if (this.gameOver) {
+            this.onFinish({
+                won: this.iWon,
+                opponentWon: false,
+                myWord: this.secret,
+                opponentWord: this.opponentRevealedWord || null
+            });
+        }
 
         this.update();
+    }
+
+
+    handleWordReveal(message) {
+
+        this.opponentRevealedWord = message.word;
+
+        if (this.gameOver) {
+            this.onFinish({
+                won: this.iWon,
+                opponentWon: this.opponentWon,
+                myWord: this.secret,
+                opponentWord: this.opponentRevealedWord
+            });
+        }
     }
 
 
@@ -769,13 +721,14 @@ export class Game {
         }
 
 
+        /*
+         * Hint is LOCAL ONLY.
+         * We show the opponent's hint that was
+         * already received during the ready phase.
+         * No network message is sent.
+         */
+
         this.showHint = true;
-
-
-        this.send({
-
-            type: "hint"
-        });
 
 
         this.update();
@@ -926,6 +879,11 @@ export class Game {
         this.showHint = false;
 
         this.opponentGuessedCorrectLetters = [];
+
+        this.iWon = false;
+        this.opponentFinished = false;
+        this.opponentWon = false;
+        this.opponentRevealedWord = null;
 
         this.update();
     }
