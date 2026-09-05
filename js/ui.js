@@ -431,7 +431,10 @@ export const UI = {
     },
 
 
-    showGameOver(won, word) {
+    showGameOver(result) {
+
+        const { won, opponentWon, myWord, opponentWord } = result;
+
 
         const modal =
             document.getElementById(
@@ -451,28 +454,43 @@ export const UI = {
             );
 
 
-        if (won) {
+        if (won && !opponentWon) {
 
             title.textContent =
                 "YOU WIN 🎉";
 
-
-            text.textContent =
-                word
-                    ? `You guessed the word: ${word}`
-                    : "You guessed the word!";
-
-        } else {
+        } else if (!won && opponentWon) {
 
             title.textContent =
                 "YOU LOSE";
 
+        } else if (won && opponentWon) {
 
-            text.textContent =
-                word
-                    ? `The word was: ${word}`
-                    : "Your opponent guessed your word.";
+            title.textContent =
+                "DRAW! (Both Guessed)";
+
+        } else {
+
+            title.textContent =
+                "DRAW! (Both Failed)";
         }
+
+
+        // Make it preserve newlines in HTML
+        text.style.whiteSpace = "pre-line";
+
+        let message = "";
+        
+        if (opponentWord) {
+            message += `Opponent's word: ${opponentWord}\n`;
+        } else {
+            message += `Opponent's word: (Not revealed yet)\n`;
+        }
+
+        message += `Your word: ${myWord}`;
+
+
+        text.textContent = message;
 
 
         modal.classList.remove(
