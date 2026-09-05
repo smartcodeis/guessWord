@@ -51,8 +51,7 @@ function createGame() {
             onFinish: result => {
 
                 UI.showGameOver(
-                    result.won,
-                    result.word
+                    result
                 );
             }
         });
