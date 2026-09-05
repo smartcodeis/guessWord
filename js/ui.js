@@ -5,7 +5,10 @@ export const UI = {
         document
             .querySelectorAll(".screen")
             .forEach(screen => {
-                screen.classList.remove("active");
+
+                screen.classList.remove(
+                    "active"
+                );
             });
 
 
@@ -88,21 +91,23 @@ export const UI = {
             element.textContent =
                 "Not ready";
 
-            element.classList.remove("ready");
+            element.classList.remove(
+                "ready"
+            );
         }
     },
 
 
     renderGame(state, playerId) {
 
+        const isMyTurn =
+            state.currentTurn === playerId;
+
+
         const turnText =
             document.getElementById(
                 "turnText"
             );
-
-
-        const isMyTurn =
-            state.currentTurn === playerId;
 
 
         turnText.textContent =
@@ -124,11 +129,13 @@ export const UI = {
 
 
         guessInput.disabled =
-            !isMyTurn || state.gameOver;
+            !isMyTurn ||
+            state.gameOver;
 
 
         guessBtn.disabled =
-            !isMyTurn || state.gameOver;
+            !isMyTurn ||
+            state.gameOver;
 
 
         document
@@ -139,15 +146,6 @@ export const UI = {
             );
 
 
-        const mySecretDisplay =
-            document.getElementById("mySecretDisplay");
-
-        if (mySecretDisplay) {
-            mySecretDisplay.textContent =
-                `Secret: ${state.secret || "---"}`;
-        }
-
-
         document
             .getElementById("opponentPlayerCard")
             .classList.toggle(
@@ -156,9 +154,170 @@ export const UI = {
             );
 
 
+        this.renderWord(
+            state
+        );
+
+
+        this.renderWrongLetters(
+            state.wrongLetters
+        );
+
+
         this.renderHistory(
             state.history
         );
+
+
+        this.renderHint(
+            state
+        );
+    },
+
+
+    renderWord(state) {
+
+        const container =
+            document.getElementById(
+                "wordDisplay"
+            );
+
+
+        const length =
+            state.opponentWordLength;
+
+
+        if (!length) {
+
+            container.innerHTML = "";
+
+            return;
+        }
+
+
+        let html = "";
+
+
+        for (
+            let i = 0;
+            i < length;
+            i++
+        ) {
+
+            const revealed =
+                state.revealedPositions
+                    .includes(i);
+
+
+            const letter =
+                revealed
+                    ? state.revealedLetters[i]
+                    : "";
+
+
+            html += `
+
+                <div
+                    class="letter-box ${revealed
+                    ? ""
+                    : "hidden-letter"
+                }"
+                >
+                    ${letter || "_"}
+                </div>
+
+            `;
+        }
+
+
+        container.innerHTML = html;
+    },
+
+
+    renderHint(state) {
+
+        const hintBtn =
+            document.getElementById(
+                "hintBtn"
+            );
+
+        const hintBox =
+            document.getElementById(
+                "hintBox"
+            );
+
+
+        if (state.showHint) {
+
+            hintBox.textContent =
+                state.opponentHint ||
+                "No hint available.";
+
+            hintBox.classList.remove(
+                "hidden"
+            );
+
+            hintBtn.textContent =
+                "💡 Hint Shown";
+
+            hintBtn.disabled = true;
+
+        } else {
+
+            hintBox.classList.add(
+                "hidden"
+            );
+
+            hintBtn.textContent =
+                "💡 Show Hint";
+
+            hintBtn.disabled = false;
+        }
+    },
+
+
+    renderWrongLetters(letters) {
+
+        const container =
+            document.getElementById(
+                "wrongLetters"
+            );
+
+
+        const count =
+            document.getElementById(
+                "wrongCount"
+            );
+
+
+        count.textContent =
+            `${letters.length} / 10`;
+
+
+        if (!letters.length) {
+
+            container.innerHTML = `
+
+                <span class="empty-wrong">
+                    No wrong guesses yet.
+                </span>
+
+            `;
+
+            return;
+        }
+
+
+        container.innerHTML =
+            letters
+                .map(letter => `
+
+                    <span class="wrong-letter">
+                        ${letter}
+                    </span>
+
+                `)
+                .join("");
     },
 
 
@@ -172,10 +331,13 @@ export const UI = {
 
         if (!history.length) {
 
-            container.innerHTML =
-                `<p class="empty-history">
+            container.innerHTML = `
+
+                <p class="empty-history">
                     No guesses yet.
-                </p>`;
+                </p>
+
+            `;
 
             return;
         }
@@ -183,40 +345,31 @@ export const UI = {
 
         container.innerHTML =
             history
-                .map(item => {
+                .map(item => `
 
-                    let text;
+                    <div
+                        class="history-item ${item.exists
+                        ? "correct"
+                        : "wrong"
+                    }"
+                    >
 
+                        <span class="guess">
+                            ${item.letter}
+                        </span>
 
-                    if (
-                        item.correctNumbers === 3 &&
-                        !item.exactOrder
-                    ) {
+                        <span class="correct">
 
-                        text =
-                            "3 correct — wrong order";
-
-                    } else {
-
-                        text =
-                            `${item.correctNumbers} correct`;
+                            ${item.exists
+                        ? "Correct"
+                        : "Wrong"
                     }
 
+                        </span>
 
-                    return `
-                        <div class="history-item">
+                    </div>
 
-                            <span class="guess">
-                                ${item.guess}
-                            </span>
-
-                            <span class="correct">
-                                ${text}
-                            </span>
-
-                        </div>
-                    `;
-                })
+                `)
                 .reverse()
                 .join("");
     },
@@ -242,41 +395,26 @@ export const UI = {
             );
 
 
-        box.classList.remove("hidden");
+        box.classList.remove(
+            "hidden"
+        );
 
 
-        if (
-            result.correctNumbers === 3 &&
-            result.exactOrder
-        ) {
-
-            title.textContent =
-                "Correct!";
-
-            text.textContent =
-                "You guessed the exact number.";
-
-        } else if (
-            result.correctNumbers === 3
-        ) {
+        if (result.exists) {
 
             title.textContent =
-                "3 numbers are correct";
+                "Correct! ✓";
 
             text.textContent =
-                "But the order is wrong.";
+                "The letter is in the word.";
 
         } else {
 
             title.textContent =
-                `${result.correctNumbers} correct number${
-                    result.correctNumbers !== 1
-                        ? "s"
-                        : ""
-                }`;
+                "Wrong letter";
 
             text.textContent =
-                "Keep trying!";
+                "That letter is not in the word.";
         }
     },
 
@@ -284,12 +422,16 @@ export const UI = {
     hideResult() {
 
         document
-            .getElementById("resultBox")
-            .classList.add("hidden");
+            .getElementById(
+                "resultBox"
+            )
+            .classList.add(
+                "hidden"
+            );
     },
 
 
-    showGameOver(won, guess, opponentSecret) {
+    showGameOver(won, word) {
 
         const modal =
             document.getElementById(
@@ -314,24 +456,28 @@ export const UI = {
             title.textContent =
                 "YOU WIN 🎉";
 
+
             text.textContent =
-                `You guessed ${guess} correctly!`;
+                word
+                    ? `You guessed the word: ${word}`
+                    : "You guessed the word!";
 
         } else {
 
             title.textContent =
                 "YOU LOSE";
 
-            const secretInfo = opponentSecret
-                ? ` The opponent's number was ${opponentSecret}.`
-                : "";
 
             text.textContent =
-                `Your opponent guessed ${guess}.${secretInfo}`;
+                word
+                    ? `The word was: ${word}`
+                    : "Your opponent guessed your word.";
         }
 
 
-        modal.classList.remove("hidden");
+        modal.classList.remove(
+            "hidden"
+        );
     },
 
 
@@ -341,7 +487,9 @@ export const UI = {
             .getElementById(
                 "gameOverModal"
             )
-            .classList.add("hidden");
+            .classList.add(
+                "hidden"
+            );
     },
 
 
@@ -353,14 +501,20 @@ export const UI = {
             );
 
 
-        toast.textContent = message;
+        toast.textContent =
+            message;
 
-        toast.classList.add("show");
+
+        toast.classList.add(
+            "show"
+        );
 
 
         setTimeout(() => {
 
-            toast.classList.remove("show");
+            toast.classList.remove(
+                "show"
+            );
 
         }, 2500);
     }
