@@ -15,7 +15,8 @@ export class WebRTCManager {
 
         this.onMessage = onMessage;
 
-        this.onDisconnected = onDisconnected;
+        this.onDisconnected =
+            onDisconnected;
 
         this.onError = onError;
     }
@@ -23,137 +24,187 @@ export class WebRTCManager {
 
     createRoom(roomCode) {
 
-        return new Promise((resolve, reject) => {
+        return new Promise(
+            (resolve, reject) => {
 
-            const peerId =
-                `ng-${roomCode}-host`;
-
-
-            this.peer = new Peer(peerId);
+                const peerId =
+                    `ng-${roomCode}-host`;
 
 
-            this.peer.on("open", () => {
-
-                resolve();
-
-                this.setupIncomingConnection();
-            });
+                this.peer =
+                    new Peer(peerId);
 
 
-            this.peer.on("connection", connection => {
+                this.peer.on(
+                    "open",
+                    () => {
 
-                /*
-                 * Only allow one opponent.
-                 */
+                        resolve();
 
-                if (
-                    this.connection &&
-                    this.connection.open
-                ) {
-
-                    connection.close();
-
-                    return;
-                }
+                        this.setupIncomingConnection();
+                    }
+                );
 
 
-                this.setupConnection(connection);
-            });
+                this.peer.on(
+                    "connection",
+                    connection => {
+
+                        if (
+                            this.connection &&
+                            this.connection.open
+                        ) {
+
+                            connection.close();
+
+                            return;
+                        }
 
 
-            this.peer.on("error", error => {
+                        this.setupConnection(
+                            connection
+                        );
+                    }
+                );
 
-                const message =
-                    this.getErrorMessage(error);
 
-                this.onError?.(message);
+                this.peer.on(
+                    "error",
+                    error => {
 
-                reject(error);
-            });
-        });
+                        const message =
+                            this.getErrorMessage(
+                                error
+                            );
+
+
+                        this.onError?.(
+                            message
+                        );
+
+
+                        reject(error);
+                    }
+                );
+            }
+        );
     }
 
 
     joinRoom(roomCode) {
 
-        return new Promise((resolve, reject) => {
+        return new Promise(
+            (resolve, reject) => {
 
-            this.peer = new Peer();
-
-
-            this.peer.on("open", () => {
-
-                const hostId =
-                    `ng-${roomCode}-host`;
+                this.peer =
+                    new Peer();
 
 
-                const connection =
-                    this.peer.connect(
-                        hostId,
-                        {
-                            reliable: true,
-                            serialization: "json"
-                        }
-                    );
+                this.peer.on(
+                    "open",
+                    () => {
+
+                        const hostId =
+                            `ng-${roomCode}-host`;
 
 
-                this.setupConnection(connection);
+                        const connection =
+                            this.peer.connect(
+                                hostId,
+                                {
+                                    reliable: true,
 
-                resolve();
-            });
+                                    serialization:
+                                        "json"
+                                }
+                            );
 
 
-            this.peer.on("error", error => {
+                        this.setupConnection(
+                            connection
+                        );
 
-                const message =
-                    this.getErrorMessage(error);
 
-                this.onError?.(message);
+                        resolve();
+                    }
+                );
 
-                reject(error);
-            });
-        });
+
+                this.peer.on(
+                    "error",
+                    error => {
+
+                        const message =
+                            this.getErrorMessage(
+                                error
+                            );
+
+
+                        this.onError?.(
+                            message
+                        );
+
+
+                        reject(error);
+                    }
+                );
+            }
+        );
     }
 
 
     setupIncomingConnection() {
-
-        /*
-         * Host waits for the guest
-         * through peer.on("connection")
-         */
+        // Host receives connection
+        // through peer.on("connection").
     }
 
 
     setupConnection(connection) {
 
-        this.connection = connection;
+        this.connection =
+            connection;
 
 
-        connection.on("open", () => {
+        connection.on(
+            "open",
+            () => {
 
-            this.onConnected?.();
-        });
-
-
-        connection.on("data", data => {
-
-            this.onMessage?.(data);
-        });
+                this.onConnected?.();
+            }
+        );
 
 
-        connection.on("close", () => {
+        connection.on(
+            "data",
+            data => {
 
-            this.onDisconnected?.();
-        });
+                this.onMessage?.(
+                    data
+                );
+            }
+        );
 
 
-        connection.on("error", error => {
+        connection.on(
+            "close",
+            () => {
 
-            this.onError?.(
-                this.getErrorMessage(error)
-            );
-        });
+                this.onDisconnected?.();
+            }
+        );
+
+
+        connection.on(
+            "error",
+            error => {
+
+                this.onError?.(
+                    this.getErrorMessage(
+                        error
+                    )
+                );
+            }
+        );
     }
 
 
@@ -170,7 +221,9 @@ export class WebRTCManager {
         }
 
 
-        this.connection.send(message);
+        this.connection.send(
+            message
+        );
     }
 
 
@@ -180,14 +233,14 @@ export class WebRTCManager {
 
             this.connection?.close();
 
-        } catch {}
+        } catch { }
 
 
         try {
 
             this.peer?.destroy();
 
-        } catch {}
+        } catch { }
 
 
         this.connection = null;
@@ -199,6 +252,7 @@ export class WebRTCManager {
     getErrorMessage(error) {
 
         if (!error) {
+
             return "Connection failed.";
         }
 
@@ -206,23 +260,36 @@ export class WebRTCManager {
         switch (error.type) {
 
             case "peer-unavailable":
+
                 return "Room not found or host is offline.";
 
+
             case "unavailable-id":
+
                 return "This room code is already in use.";
 
+
             case "network":
+
                 return "Network connection failed.";
 
+
             case "server-error":
+
                 return "Signaling server error.";
 
+
             case "socket-error":
+
                 return "Connection server error.";
 
+
             default:
-                return error.message ||
-                    "Connection failed.";
+
+                return (
+                    error.message ||
+                    "Connection failed."
+                );
         }
     }
 }
