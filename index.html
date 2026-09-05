@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Word Guessing Game</title>
+
+  <link rel="stylesheet" href="css/style.css">
+
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <!-- HOME -->
+
+    <section id="homeScreen" class="screen active">
+
+      <div class="card home-card">
+
+        <h1>Word Guessing</h1>
+
+        <p class="subtitle">
+          Choose a secret word and let your opponent guess it letter by letter.
+        </p>
+
+        <button id="createRoomBtn" class="primary-btn">
+          Create Room
+        </button>
+
+        <div class="divider">
+          <span>OR</span>
+        </div>
+
+        <div class="join-box">
+
+          <input id="roomCodeInput" type="text" maxlength="6" placeholder="Enter room code" inputmode="numeric">
+
+          <button id="joinRoomBtn" class="secondary-btn">
+            Join Room
+          </button>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ROOM -->
+
+    <section id="roomScreen" class="screen">
+
+      <div class="card room-card">
+
+        <div class="top-bar">
+
+          <button id="leaveRoomBtn" class="small-btn">
+            Leave
+          </button>
+
+          <div id="connectionBadge" class="badge waiting">
+            Waiting
+          </div>
+
+        </div>
+
+        <h2>Game Room</h2>
+
+        <div id="hostCodeBox" class="room-code-box hidden">
+
+          <span>Room Code</span>
+
+          <strong id="hostCode">
+            000000
+          </strong>
+
+        </div>
+
+        <p id="roomStatus">
+          Waiting for opponent...
+        </p>
+
+
+        <div id="readyPanel" class="hidden">
+
+          <div class="secret-section">
+
+            <h3>Choose Your Secret Word</h3>
+
+            <p>
+              Your opponent will try to guess your word.
+            </p>
+
+            <input id="secretInput" type="text" maxlength="30" placeholder="Enter your word" autocomplete="off">
+
+            <input id="hintInput" type="text" maxlength="100" placeholder="Enter a hint" autocomplete="off">
+
+            <button id="readyBtn" class="primary-btn">
+              I'm Ready
+            </button>
+
+            <div id="readyState" class="ready-state">
+              Not ready
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- GAME -->
+
+    <section id="gameScreen" class="screen">
+
+      <div class="game-container">
+
+        <div class="players">
+
+          <div id="myPlayerCard" class="player-card active-player">
+
+            <span>You</span>
+
+            <strong id="myPlayerLabel">
+              Player 1
+            </strong>
+
+          </div>
+
+
+          <div id="opponentPlayerCard" class="player-card">
+
+            <span>Opponent</span>
+
+            <strong id="opponentPlayerLabel">
+              Player 2
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        <div class="card game-card">
+
+          <div class="turn-section">
+
+            <span>Current Turn</span>
+
+            <h2 id="turnText">
+              Your Turn
+            </h2>
+
+          </div>
+
+
+          <!-- WORD -->
+
+          <div class="word-section">
+
+            <div id="wordDisplay" class="word-display">
+            </div>
+
+          </div>
+
+
+          <!-- HINT -->
+
+          <div class="hint-section">
+
+            <button id="hintBtn" class="secondary-btn">
+              💡 Show Hint
+            </button>
+
+            <div id="hintBox" class="hint-box hidden">
+            </div>
+
+          </div>
+
+
+          <!-- RESULT -->
+
+          <div id="resultBox" class="result-box hidden">
+
+            <h3 id="resultTitle"></h3>
+
+            <p id="resultText"></p>
+
+          </div>
+
+
+          <!-- GUESS -->
+
+          <div class="guess-section">
+
+            <input id="guessInput" type="text" maxlength="1" placeholder="A" autocomplete="off">
+
+            <button id="guessBtn" class="primary-btn">
+              Guess Letter
+            </button>
+
+          </div>
+
+
+          <!-- WRONG -->
+
+          <div class="wrong-section">
+
+            <div class="wrong-header">
+
+              <h3>
+                Wrong Guesses
+              </h3>
+
+              <span id="wrongCount">
+                0 / 10
+              </span>
+
+            </div>
+
+            <div id="wrongLetters">
+              <span class="empty-wrong">
+                No wrong guesses yet.
+              </span>
+            </div>
+
+          </div>
+
+
+          <!-- HISTORY -->
+
+          <div class="history-section">
+
+            <div class="history-header">
+
+              <h3>
+                Guessed Letters
+              </h3>
+
+              <button id="clearHistoryBtn" class="small-btn">
+                Clear
+              </button>
+
+            </div>
+
+            <div id="historyList">
+
+              <p class="empty-history">
+                No guesses yet.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </div>
+
+
+  <!-- GAME OVER -->
+
+  <div id="gameOverModal" class="modal hidden">
+
+    <div class="modal-card">
+
+      <h1 id="gameOverTitle">
+        YOU WIN
+      </h1>
+
+      <p id="gameOverText">
+        Congratulations!
+      </p>
+
+      <button id="playAgainBtn" class="primary-btn">
+        Play Again (Rematch)
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <div id="toast" class="toast"></div>
+
+
+  <script type="module" src="js/main.js"></script>
+
+</body>
+
+</html>
