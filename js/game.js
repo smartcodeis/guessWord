@@ -16,13 +16,23 @@ export class Game {
         this.onFinish = onFinish;
 
 
+        // My secret word.
+        // NEVER sent during normal gameplay.
         this.secret = null;
 
         this.hint = "";
 
+
+        // Opponent information that is safe to share.
+        this.opponentWordLength = 0;
+
+        this.opponentHint = "";
+
+
         this.myReady = false;
 
         this.opponentReady = false;
+
 
         this.gameStarted = false;
 
@@ -32,9 +42,24 @@ export class Game {
         this.currentTurn = "player1";
 
 
+        // Letters I guessed.
         this.guessedLetters = [];
 
+
+        // Letters that were wrong.
         this.wrongLetters = [];
+
+
+        // Positions revealed by the opponent.
+        this.revealedPositions = [];
+
+        // Letters revealed by the opponent (index -> letter).
+        this.revealedLetters = {};
+
+
+        // History of my guesses.
+        this.history = [];
+
 
         this.lastResult = null;
 
@@ -84,15 +109,22 @@ export class Game {
 
 
         /*
-         * IMPORTANT:
+         * We only send:
          *
-         * We NEVER send the secret word.
+         * - ready state
+         * - word length
+         * - hint
          *
-         * Only send that we are ready.
+         * The actual word is NEVER sent.
          */
 
         this.send({
-            type: "player-ready"
+
+            type: "player-ready",
+
+            wordLength: word.length,
+
+            hint
         });
 
 
@@ -174,6 +206,13 @@ export class Game {
 
                 this.opponentReady = true;
 
+                this.opponentWordLength =
+                    message.wordLength;
+
+                this.opponentHint =
+                    message.hint || "";
+
+
                 this.tryStart();
 
                 this.update();
@@ -187,6 +226,7 @@ export class Game {
 
                 this.currentTurn =
                     message.firstTurn;
+
 
                 this.update();
 
@@ -241,21 +281,9 @@ export class Game {
 
             case "game-over":
 
-                this.gameOver = true;
-
-                this.gameStarted = false;
-
-
-                this.onFinish({
-
-                    won:
-                        message.winner ===
-                        this.playerId,
-
-                    word:
-                        message.word
-
-                });
+                this.handleGameOver(
+                    message
+                );
 
                 break;
         }
@@ -302,9 +330,45 @@ export class Game {
         }
 
 
-        const exists =
-            this.secret.includes(letter);
+        const positions = [];
 
+
+        /*
+         * Find EVERY occurrence of the letter.
+         *
+         * Example:
+         *
+         * secret = "perfect"
+         * letter = "e"
+         *
+         * positions = [1, 3]
+         */
+
+        for (
+            let i = 0;
+            i < this.secret.length;
+            i++
+        ) {
+
+            if (this.secret[i] === letter) {
+
+                positions.push(i);
+            }
+        }
+
+
+        const exists =
+            positions.length > 0;
+
+
+        /*
+         * Tell the opponent only:
+         *
+         * - whether the letter exists
+         * - where it exists
+         *
+         * NEVER send the secret word here.
+         */
 
         this.send({
 
@@ -312,43 +376,137 @@ export class Game {
 
             letter,
 
-            exists
+            exists,
+
+            positions
         });
 
 
         /*
-         * Check whether the opponent
-         * completed the entire word.
+         * If all positions are revealed,
+         * the opponent wins.
          */
 
         if (exists) {
 
-            const opponentGuessedLetters =
-                this.getOpponentGuessedLetters(
+            const allPositions =
+                this.getAllGuessedPositionsForWord(
                     letter
                 );
 
+
             /*
-             * The actual win check is handled
-             * using the letters the opponent
-             * has guessed.
+             * We only need to check whether
+             * this latest guess reveals the
+             * last missing letter.
              *
-             * We keep the state locally by
-             * receiving the guesses through
-             * the result messages.
+             * Since the opponent's previous
+             * guessed letters are not sent to us,
+             * we determine completion using the
+             * message sequence indirectly:
+             *
+             * Every unique correct letter can be
+             * tracked locally by the defender.
              */
+
+            this.trackOpponentCorrectLetter(
+                letter
+            );
+
+
+            if (
+                this.isOpponentWordSolved()
+            ) {
+
+                this.send({
+
+                    type: "game-over",
+
+                    winner:
+                        this.playerId === "player1"
+                            ? "player2"
+                            : "player1",
+
+                    word:
+                        this.secret
+                });
+
+
+                this.gameOver = true;
+
+                this.gameStarted = false;
+
+                this.onFinish({
+
+                    won: false,
+
+                    word: this.secret
+                });
+
+
+                return;
+            }
         }
     }
 
 
-    getOpponentGuessedLetters() {
+    /*
+     * Letters correctly guessed by the opponent.
+     *
+     * This is stored only on the defender's device.
+     */
+
+    trackOpponentCorrectLetter(letter) {
+
+        if (!this.opponentGuessedCorrectLetters) {
+
+            this.opponentGuessedCorrectLetters = [];
+        }
+
+
+        if (
+            !this.opponentGuessedCorrectLetters
+                .includes(letter)
+        ) {
+
+            this.opponentGuessedCorrectLetters.push(
+                letter
+            );
+        }
+    }
+
+
+    isOpponentWordSolved() {
+
+        if (!this.secret) {
+            return false;
+        }
+
+
+        if (!this.opponentGuessedCorrectLetters) {
+            return false;
+        }
+
 
         /*
-         * This method exists to keep the logic
-         * separated. The opponent's exact
-         * guessed letters are reconstructed
-         * through the game messages.
+         * Every UNIQUE letter in the word
+         * must have been guessed.
          */
+
+        const uniqueLetters =
+            new Set(this.secret);
+
+
+        return [
+            ...uniqueLetters
+        ].every(letter =>
+            this.opponentGuessedCorrectLetters
+                .includes(letter)
+        );
+    }
+
+
+    getAllGuessedPositionsForWord() {
 
         return [];
     }
@@ -362,100 +520,141 @@ export class Game {
                 message.letter,
 
             exists:
-                message.exists
+                message.exists,
+
+            positions:
+                message.positions || []
         };
 
 
         /*
-         * If the letter was wrong,
-         * add it to wrong guesses.
+         * Save revealed positions AND letters.
          */
-
-        if (!message.exists) {
-
-            if (
-                !this.wrongLetters.includes(
-                    message.letter
-                )
-            ) {
-
-                this.wrongLetters.push(
-                    message.letter
-                );
-            }
-        }
-
-
-        /*
-         * Check whether the guessed letters
-         * reveal the entire word.
-         *
-         * We can determine this from our own
-         * guessed letters because the opponent
-         * sends back the result of our guess.
-         */
-
-        const solved =
-            this.secret === null
-                ? false
-                : false;
-
-
-        /*
-         * The opponent does not know our secret.
-         * Therefore, the local game state must
-         * be based on the word belonging to the
-         * opponent.
-         *
-         * We don't receive the opponent's word.
-         * So the opponent tells us when the word
-         * is completely solved through game-over.
-         */
-
 
         if (message.exists) {
 
-            this.update();
-
-        } else {
-
-            if (
-                this.wrongLetters.length >= 10
-            ) {
-
-                this.send({
-
-                    type: "game-over",
-
-                    winner:
-                        this.playerId === "player1"
-                            ? "player2"
-                            : "player1",
-
-                    word:
-                        message.word || null
-                });
-
-
-                this.gameOver = true;
-
-                this.gameStarted = false;
-
-
-                this.onFinish({
-
-                    won: false,
-
-                    word: message.word
-                });
-
-
-                return;
+            if (!this.revealedLetters) {
+                this.revealedLetters = {};
             }
 
+            for (
+                const position of message.positions
+            ) {
 
-            this.changeTurn();
+                if (
+                    !this.revealedPositions
+                        .includes(position)
+                ) {
+
+                    this.revealedPositions.push(
+                        position
+                    );
+                }
+
+                // Store the actual letter at this position
+                this.revealedLetters[position] =
+                    message.letter;
+            }
         }
+
+
+        /*
+         * Save history.
+         */
+
+        this.history.push({
+
+            letter:
+                message.letter,
+
+            exists:
+                message.exists
+        });
+
+
+        /*
+         * Correct letter.
+         */
+
+        if (message.exists) {
+
+            /*
+             * The opponent sends game-over
+             * when this was the final letter.
+             *
+             * So here we simply wait for
+             * game-over.
+             */
+
+            this.update();
+
+            return;
+        }
+
+
+        /*
+         * Wrong letter.
+         */
+
+        if (
+            !this.wrongLetters.includes(
+                message.letter
+            )
+        ) {
+
+            this.wrongLetters.push(
+                message.letter
+            );
+        }
+
+
+        /*
+         * Ten wrong guesses = lose.
+         */
+
+        if (
+            this.wrongLetters.length >= 10
+        ) {
+
+            /*
+             * The guesser (me) lost.
+             *
+             * Tell the opponent (who holds the secret)
+             * that they won. The opponent will respond
+             * with game-over containing their secret word.
+             */
+
+            this.send({
+
+                type: "game-over",
+
+                winner:
+                    this.playerId === "player1"
+                        ? "player2"
+                        : "player1",
+
+                word: null
+            });
+
+
+            this.gameOver = true;
+
+            this.gameStarted = false;
+
+
+            this.onFinish({
+
+                won: false,
+
+                word: null   // we don't know it yet
+            });
+
+
+            return;
+        }
+
+
+        this.changeTurn();
     }
 
 
@@ -480,6 +679,89 @@ export class Game {
     }
 
 
+    handleGameOver(message) {
+
+        const won =
+            message.winner === this.playerId;
+
+
+        /*
+         * If the defender receives a game-over
+         * saying the guesser lost (their own
+         * secret word was not found),
+         * the defender must reveal the secret word.
+         */
+
+        if (!this.gameOver && !won && this.secret) {
+
+            // Guesser lost: we are the defender.
+            // Send back game-over with the real word.
+
+            this.gameOver = true;
+
+            this.gameStarted = false;
+
+            this.send({
+
+                type: "game-over",
+
+                winner: message.winner,
+
+                word: this.secret
+            });
+
+
+            this.onFinish({
+
+                won: true,
+
+                word: this.secret
+            });
+
+
+            this.update();
+
+            return;
+        }
+
+
+        /*
+         * If we already ended locally (guesser side),
+         * now we receive the word from the defender.
+         */
+
+        if (this.gameOver) {
+
+            // Update the game-over display with the word
+            if (message.word) {
+                this.onFinish({
+                    won: false,
+                    word: message.word
+                });
+            }
+
+            return;
+        }
+
+
+        this.gameOver = true;
+
+        this.gameStarted = false;
+
+
+        this.onFinish({
+
+            won,
+
+            word:
+                message.word || null
+        });
+
+
+        this.update();
+    }
+
+
     requestHint() {
 
         if (!this.gameStarted) {
@@ -489,6 +771,7 @@ export class Game {
 
         this.showHint = true;
 
+
         this.send({
 
             type: "hint"
@@ -496,6 +779,47 @@ export class Game {
 
 
         this.update();
+    }
+
+
+    getCurrentWordDisplay() {
+
+        const result = [];
+
+
+        for (
+            let i = 0;
+            i < this.opponentWordLength;
+            i++
+        ) {
+
+            if (
+                this.revealedPositions
+                    .includes(i)
+            ) {
+
+                /*
+                 * We need the actual character.
+                 *
+                 * It arrives safely inside the
+                 * guess-result message through
+                 * the position only, not the word.
+                 *
+                 * Therefore we store revealed letters.
+                 */
+
+                result.push(
+                    this.revealedLetters?.[i] || "_"
+                );
+
+            } else {
+
+                result.push("_");
+            }
+        }
+
+
+        return result;
     }
 
 
@@ -510,6 +834,12 @@ export class Game {
 
                 hint:
                     this.hint,
+
+                opponentWordLength:
+                    this.opponentWordLength,
+
+                opponentHint:
+                    this.opponentHint,
 
                 myReady:
                     this.myReady,
@@ -531,6 +861,15 @@ export class Game {
 
                 wrongLetters:
                     this.wrongLetters,
+
+                revealedPositions:
+                    this.revealedPositions,
+
+                revealedLetters:
+                    this.revealedLetters || {},
+
+                history:
+                    this.history,
 
                 lastResult:
                     this.lastResult,
@@ -558,6 +897,10 @@ export class Game {
 
         this.hint = "";
 
+        this.opponentWordLength = 0;
+
+        this.opponentHint = "";
+
         this.myReady = false;
 
         this.opponentReady = false;
@@ -572,10 +915,17 @@ export class Game {
 
         this.wrongLetters = [];
 
+        this.revealedPositions = [];
+
+        this.revealedLetters = {};
+
+        this.history = [];
+
         this.lastResult = null;
 
         this.showHint = false;
 
+        this.opponentGuessedCorrectLetters = [];
 
         this.update();
     }
@@ -583,41 +933,6 @@ export class Game {
 
     reset() {
 
-        this.secret = null;
-
-        this.hint = "";
-
-        this.myReady = false;
-
-        this.opponentReady = false;
-
-        this.gameStarted = false;
-
-        this.gameOver = false;
-
-        this.currentTurn = "player1";
-
-        this.guessedLetters = [];
-
-        this.wrongLetters = [];
-
-        this.lastResult = null;
-
-        this.showHint = false;
-    }
-
-
-    static buildWordDisplay(
-        word,
-        guessedLetters
-    ) {
-
-        return [...word].map(letter => {
-
-            return guessedLetters.includes(letter)
-                ? letter
-                : "_";
-
-        });
+        this.resetForRematch();
     }
 }
