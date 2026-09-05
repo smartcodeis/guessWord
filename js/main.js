@@ -15,7 +15,6 @@ const state = {
 };
 
 
-
 function generateRoomCode() {
 
     return String(
@@ -25,7 +24,6 @@ function generateRoomCode() {
         )
     );
 }
-
 
 
 function createGame() {
@@ -54,13 +52,11 @@ function createGame() {
 
                 UI.showGameOver(
                     result.won,
-                    result.guess,
-                    result.opponentSecret
+                    result.word
                 );
             }
         });
 }
-
 
 
 function createTransport() {
@@ -75,11 +71,9 @@ function createTransport() {
                     "Connected"
                 );
 
-
                 UI.setRoomStatus(
                     "Opponent connected!"
                 );
-
 
                 UI.showReadyPanel();
             },
@@ -100,11 +94,9 @@ function createTransport() {
                     "Disconnected"
                 );
 
-
                 UI.setRoomStatus(
                     "Opponent disconnected."
                 );
-
 
                 UI.toast(
                     "Opponent disconnected."
@@ -119,12 +111,10 @@ function createTransport() {
                     "Connection Error"
                 );
 
-
                 UI.toast(message);
             }
         });
 }
-
 
 
 function renderGameState(gameState) {
@@ -142,11 +132,15 @@ function renderGameState(gameState) {
         UI.setRoomStatus(
             "Both players are ready!"
         );
-    } else if (gameState.opponentReady) {
-        
+
+    } else if (
+        gameState.opponentReady
+    ) {
+
         UI.setRoomStatus(
             "Opponent is ready! Waiting for you."
         );
+
     } else {
 
         UI.setRoomStatus(
@@ -178,24 +172,40 @@ function renderGameState(gameState) {
 
             UI.hideResult();
         }
+
     } else {
 
         UI.showScreen(
             "roomScreen"
         );
 
-        
-        document.getElementById(
-            "secretInput"
-        ).disabled = gameState.myReady;
+
+        const secretInput =
+            document.getElementById(
+                "secretInput"
+            );
+
+        const hintInput =
+            document.getElementById(
+                "hintInput"
+            );
+
+        const readyBtn =
+            document.getElementById(
+                "readyBtn"
+            );
 
 
-        document.getElementById(
-            "readyBtn"
-        ).disabled = gameState.myReady;
+        secretInput.disabled =
+            gameState.myReady;
+
+        hintInput.disabled =
+            gameState.myReady;
+
+        readyBtn.disabled =
+            gameState.myReady;
     }
 }
-
 
 
 /* CREATE ROOM */
@@ -249,7 +259,7 @@ document
                 await state.transport
                     .createRoom(code);
 
-            } catch (error) {
+            } catch {
 
                 UI.toast(
                     "Could not create room."
@@ -257,7 +267,6 @@ document
             }
         }
     );
-
 
 
 /* JOIN ROOM */
@@ -325,7 +334,7 @@ document
                 await state.transport
                     .joinRoom(code);
 
-            } catch (error) {
+            } catch {
 
                 UI.toast(
                     "Could not join room."
@@ -333,7 +342,6 @@ document
             }
         }
     );
-
 
 
 /* READY */
@@ -344,43 +352,30 @@ document
         "click",
         () => {
 
-            const input =
+            const secretInput =
                 document.getElementById(
                     "secretInput"
                 );
 
-
-            const secret =
-                input.value.trim();
-
-
-            if (!/^\d{3}$/.test(secret)) {
-
-                UI.toast(
-                    "Secret number must be exactly 3 digits."
+            const hintInput =
+                document.getElementById(
+                    "hintInput"
                 );
 
-                return;
-            }
+
+            const word =
+                secretInput.value.trim();
+
+            const hint =
+                hintInput.value.trim();
 
 
             try {
 
-                state.game
-                    .setSecretNumber(
-                        secret
-                    );
-
-
-                input.disabled = true;
-
-
-                document
-                    .getElementById(
-                        "readyBtn"
-                    )
-                    .disabled = true;
-
+                state.game.setSecretWord(
+                    word,
+                    hint
+                );
 
             } catch (error) {
 
@@ -390,7 +385,6 @@ document
             }
         }
     );
-
 
 
 /* GUESS */
@@ -407,28 +401,17 @@ document
                 );
 
 
-            const value =
+            const letter =
                 input.value.trim();
-
-
-            if (!/^\d{3}$/.test(value)) {
-
-                UI.toast(
-                    "Guess must be exactly 3 digits."
-                );
-
-                return;
-            }
 
 
             try {
 
-                state.game
-                    .makeGuess(value);
-
+                state.game.makeGuess(
+                    letter
+                );
 
                 input.value = "";
-
 
                 UI.hideResult();
 
@@ -440,7 +423,6 @@ document
             }
         }
     );
-
 
 
 /* ENTER TO GUESS */
@@ -462,6 +444,18 @@ document
         }
     );
 
+
+/* HINT */
+
+document
+    .getElementById("hintBtn")
+    .addEventListener(
+        "click",
+        () => {
+
+            state.game?.requestHint();
+        }
+    );
 
 
 /* CLEAR HISTORY */
@@ -486,14 +480,12 @@ document
 
             UI.hideResult();
 
-
             UI.renderHistory([]);
         }
     );
 
 
-
-/* LEAVE ROOM */
+/* LEAVE */
 
 document
     .getElementById(
@@ -508,7 +500,6 @@ document
     );
 
 
-
 /* PLAY AGAIN */
 
 document
@@ -521,10 +512,9 @@ document
 
             UI.hideGameOver();
 
-            state.game.playAgain();
+            state.game?.playAgain();
         }
     );
-
 
 
 function resetGame() {
@@ -533,7 +523,7 @@ function resetGame() {
 
         state.transport?.disconnect();
 
-    } catch {}
+    } catch { }
 
 
     state.playerId = null;
@@ -550,9 +540,17 @@ function resetGame() {
     ).value = "";
 
     document.getElementById(
+        "hintInput"
+    ).value = "";
+
+
+    document.getElementById(
         "secretInput"
     ).disabled = false;
 
+    document.getElementById(
+        "hintInput"
+    ).disabled = false;
 
     document.getElementById(
         "readyBtn"
@@ -574,8 +572,7 @@ function resetGame() {
 }
 
 
-
-/* Cleanup */
+/* CLEANUP */
 
 window.addEventListener(
     "beforeunload",
@@ -585,6 +582,6 @@ window.addEventListener(
 
             state.transport?.disconnect();
 
-        } catch {}
+        } catch { }
     }
 );
