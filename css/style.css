@@ -121,7 +121,9 @@ button {
 .primary-btn:disabled,
 .secondary-btn:disabled {
     opacity: 0.5;
+
     cursor: not-allowed;
+
     transform: none;
 }
 
@@ -221,16 +223,19 @@ input::placeholder {
 
 .badge.waiting {
     background: rgba(255, 193, 7, 0.15);
+
     color: #ffc107;
 }
 
 .badge.connected {
     background: rgba(0, 200, 120, 0.15);
+
     color: #00d084;
 }
 
 .badge.error {
     background: rgba(255, 60, 60, 0.15);
+
     color: #ff6464;
 }
 
@@ -406,6 +411,10 @@ input::placeholder {
     font-weight: bold;
 
     text-transform: uppercase;
+}
+
+.letter-box.hidden-letter {
+    color: transparent;
 }
 
 
@@ -595,6 +604,14 @@ input::placeholder {
     font-size: 13px;
 }
 
+.history-item.correct {
+    border-left: 3px solid #00d084;
+}
+
+.history-item.wrong {
+    border-left: 3px solid #ff6464;
+}
+
 .empty-history {
     color: #777;
 
@@ -737,7 +754,9 @@ input::placeholder {
 
     .letter-box {
         width: 36px;
+
         height: 48px;
+
         font-size: 23px;
     }
 
