@@ -1,6 +1,7 @@
 import { Game } from "./game.js";
 import { WebRTCManager } from "./webrtc.js";
 import { UI } from "./ui.js";
+import { Storage } from "./storage.js";
 
 
 const state = {
@@ -15,145 +16,123 @@ const state = {
 };
 
 
-function generateRoomCode() {
-
-    return String(
-        Math.floor(
-            100000 +
-            Math.random() * 900000
-        )
-    );
-}
-
+/* ─── Game Factory ─────────────────────────────────────────────── */
 
 function createGame() {
 
-    state.game =
-        new Game({
+    const savedScores = Storage.getScores(state.roomCode);
 
-            playerId:
-                state.playerId,
+    state.game = new Game({
 
-            send: message => {
+        playerId: state.playerId,
 
-                state.transport.send(
-                    message
-                );
-            },
+        roomCode: state.roomCode,
 
-            onUpdate: gameState => {
+        send: message => {
+            state.transport.send(message);
+        },
 
-                renderGameState(
-                    gameState
-                );
-            },
+        onUpdate: gameState => {
+            renderGameState(gameState);
+        },
 
-            onFinish: result => {
+        onFinish: result => {
+            UI.showGameOver(result, state.playerId);
+        }
+    });
 
-                UI.showGameOver(
-                    result
-                );
-            }
-        });
+    // تحميل الـ Scores المحفوظة
+    state.game.scores = { ...savedScores };
 }
 
+
+/* ─── Transport Factory ────────────────────────────────────────── */
 
 function createTransport() {
 
-    state.transport =
-        new WebRTCManager({
+    state.transport = new WebRTCManager({
 
-            onConnected: () => {
+        onConnected: () => {
 
-                UI.setConnectionBadge(
-                    "connected",
-                    "Connected"
-                );
+            UI.setConnectionBadge("connected", "Connected");
 
-                UI.setRoomStatus(
-                    "Opponent connected!"
-                );
+            UI.setRoomStatus("Opponent connected!");
 
-                UI.showReadyPanel();
-            },
+            UI.showReadyPanel();
+
+            // إذا كان هناك حالة محفوظة للعبة، نستعيدها
+            _tryRestoreGameState();
+        },
 
 
-            onMessage: message => {
-
-                state.game?.receive(
-                    message
-                );
-            },
+        onMessage: message => {
+            state.game?.receive(message);
+        },
 
 
-            onDisconnected: () => {
+        onDisconnected: () => {
 
-                UI.setConnectionBadge(
-                    "error",
-                    "Disconnected"
-                );
+            UI.setConnectionBadge("error", "Disconnected");
 
-                UI.setRoomStatus(
-                    "Opponent disconnected."
-                );
+            UI.setRoomStatus("Opponent disconnected.");
 
-                UI.toast(
-                    "Opponent disconnected."
-                );
-            },
+            UI.toast("Opponent disconnected.");
+        },
 
 
-            onError: message => {
+        onError: message => {
 
-                UI.setConnectionBadge(
-                    "error",
-                    "Connection Error"
-                );
+            UI.setConnectionBadge("error", "Connection Error");
 
-                UI.toast(message);
-            }
-        });
+            UI.toast(message);
+        }
+    });
 }
 
 
+/**
+ * محاولة استعادة حالة اللعبة المحفوظة بعد الاتصال.
+ * تُستخدم عند الـ Refresh أو إعادة الدخول بنفس الكود.
+ */
+function _tryRestoreGameState() {
+
+    if (!state.game || !state.roomCode) return;
+
+    const savedState = Storage.loadGameState(state.roomCode);
+
+    if (savedState && savedState.gameStarted) {
+
+        state.game.restoreState(savedState);
+
+        UI.toast("Game state restored ✓");
+    }
+}
+
+
+/* ─── Render ───────────────────────────────────────────────────── */
+
 function renderGameState(gameState) {
 
-    UI.setReadyState(
-        gameState.myReady
-    );
+    UI.setReadyState(gameState.myReady);
 
 
-    if (
-        gameState.myReady &&
-        gameState.opponentReady
-    ) {
+    if (gameState.myReady && gameState.opponentReady) {
 
-        UI.setRoomStatus(
-            "Both players are ready!"
-        );
+        UI.setRoomStatus("Both players are ready!");
 
-    } else if (
-        gameState.opponentReady
-    ) {
+    } else if (gameState.opponentReady) {
 
-        UI.setRoomStatus(
-            "Opponent is ready! Waiting for you."
-        );
+        UI.setRoomStatus("Opponent is ready! Waiting for you.");
 
     } else {
 
-        UI.setRoomStatus(
-            "Waiting for opponent..."
-        );
+        UI.setRoomStatus("Waiting for opponent...");
     }
 
 
     if (gameState.gameStarted) {
 
-        UI.showScreen(
-            "gameScreen"
-        );
-
+        UI.showScreen("gameScreen");
 
         UI.renderGame(
             gameState,
@@ -163,9 +142,7 @@ function renderGameState(gameState) {
 
         if (gameState.lastResult) {
 
-            UI.showResult(
-                gameState.lastResult
-            );
+            UI.showResult(gameState.lastResult);
 
         } else {
 
@@ -174,354 +151,259 @@ function renderGameState(gameState) {
 
     } else {
 
-        UI.showScreen(
-            "roomScreen"
-        );
+        UI.showScreen("roomScreen");
 
 
         const secretInput =
-            document.getElementById(
-                "secretInput"
-            );
+            document.getElementById("secretInput");
 
         const hintInput =
-            document.getElementById(
-                "hintInput"
-            );
+            document.getElementById("hintInput");
 
         const readyBtn =
-            document.getElementById(
-                "readyBtn"
-            );
+            document.getElementById("readyBtn");
 
 
-        secretInput.disabled =
-            gameState.myReady;
+        secretInput.disabled = gameState.myReady;
 
-        hintInput.disabled =
-            gameState.myReady;
+        hintInput.disabled = gameState.myReady;
 
-        readyBtn.disabled =
-            gameState.myReady;
+        readyBtn.disabled = gameState.myReady;
     }
 }
 
 
-/* CREATE ROOM */
+/* ─── CREATE ROOM ──────────────────────────────────────────────── */
 
 document
     .getElementById("createRoomBtn")
-    .addEventListener(
-        "click",
-        async () => {
+    .addEventListener("click", async () => {
 
-            const code =
-                generateRoomCode();
+        // توليد كود فريد من Storage (أرقام فقط، غير مستخدم سابقاً)
+        const code = Storage.generateUniqueRoomCode();
 
+        state.playerId = "player1";
 
-            state.playerId =
-                "player1";
+        state.roomCode = code;
 
+        // حفظ الدور في Storage مرتبطاً بالكود والجهاز
+        Storage.assignPlayerRole(code, "player1");
 
-            state.roomCode =
-                code;
-
-
-            createTransport();
-
-            createGame();
+        createTransport();
+        createGame();
 
 
-            UI.showScreen(
-                "roomScreen"
-            );
+        UI.showScreen("roomScreen");
+
+        UI.showHostCode(code);
+
+        UI.setConnectionBadge("waiting", "Waiting");
+
+        UI.setRoomStatus("Waiting for opponent...");
 
 
-            UI.showHostCode(
-                code
-            );
-
-
-            UI.setConnectionBadge(
-                "waiting",
-                "Waiting"
-            );
-
-
-            UI.setRoomStatus(
-                "Waiting for opponent..."
-            );
-
-
-            try {
-
-                await state.transport
-                    .createRoom(code);
-
-            } catch {
-
-                UI.toast(
-                    "Could not create room."
-                );
-            }
+        try {
+            await state.transport.createRoom(code);
+        } catch {
+            UI.toast("Could not create room.");
         }
-    );
+    });
 
 
-/* JOIN ROOM */
+/* ─── JOIN ROOM ────────────────────────────────────────────────── */
 
 document
     .getElementById("joinRoomBtn")
-    .addEventListener(
-        "click",
-        async () => {
+    .addEventListener("click", async () => {
 
-            const input =
-                document.getElementById(
-                    "roomCodeInput"
-                );
+        const input = document.getElementById("roomCodeInput");
+
+        const code = input.value.trim();
 
 
-            const code =
-                input.value.trim();
+        if (!/^\d{6}$/.test(code)) {
+
+            UI.toast("Enter a valid 6-digit room code.");
+
+            return;
+        }
 
 
-            if (!/^\d{6}$/.test(code)) {
+        // تحقق من الدور المحفوظ لهذا الجهاز في هذه اللعبة
+        let assignedRole = Storage.getPlayerRole(code);
+
+        if (!assignedRole) {
+
+            // جهاز جديد → يحاول الانضمام كـ player2
+            const result = Storage.assignPlayerRole(code, "player2");
+
+            if (result === "full") {
 
                 UI.toast(
-                    "Enter a valid 6-digit room code."
+                    "This game already has 2 players. " +
+                    "Use a different code or rejoin from your original device."
                 );
 
                 return;
             }
 
-
-            state.playerId =
-                "player2";
-
-
-            state.roomCode =
-                code;
-
-
-            createTransport();
-
-            createGame();
-
-
-            UI.showScreen(
-                "roomScreen"
-            );
-
-
-            UI.hideHostCode();
-
-
-            UI.setConnectionBadge(
-                "waiting",
-                "Connecting"
-            );
-
-
-            UI.setRoomStatus(
-                "Connecting to room..."
-            );
-
-
-            try {
-
-                await state.transport
-                    .joinRoom(code);
-
-            } catch {
-
-                UI.toast(
-                    "Could not join room."
-                );
-            }
+            assignedRole = result;
         }
-    );
 
 
-/* READY */
+        state.playerId = assignedRole;
+
+        state.roomCode = code;
+
+        createTransport();
+        createGame();
+
+
+        UI.showScreen("roomScreen");
+
+        UI.hideHostCode();
+
+        UI.setConnectionBadge("waiting", "Connecting");
+
+        UI.setRoomStatus("Connecting to room...");
+
+
+        try {
+            await state.transport.joinRoom(code);
+        } catch {
+            UI.toast("Could not join room.");
+        }
+    });
+
+
+/* ─── READY ────────────────────────────────────────────────────── */
 
 document
     .getElementById("readyBtn")
-    .addEventListener(
-        "click",
-        () => {
+    .addEventListener("click", () => {
 
-            const secretInput =
-                document.getElementById(
-                    "secretInput"
-                );
+        const secretInput =
+            document.getElementById("secretInput");
 
-            const hintInput =
-                document.getElementById(
-                    "hintInput"
-                );
+        const hintInput =
+            document.getElementById("hintInput");
 
 
-            const word =
-                secretInput.value.trim();
+        const word = secretInput.value.trim();
 
-            const hint =
-                hintInput.value.trim();
+        const hint = hintInput.value.trim();
 
 
-            try {
+        try {
 
-                state.game.setSecretWord(
-                    word,
-                    hint
-                );
+            state.game.setSecretWord(word, hint);
 
-            } catch (error) {
+        } catch (error) {
 
-                UI.toast(
-                    error.message
-                );
-            }
+            UI.toast(error.message);
         }
-    );
+    });
 
 
-/* GUESS */
+/* ─── GUESS ────────────────────────────────────────────────────── */
 
 document
     .getElementById("guessBtn")
-    .addEventListener(
-        "click",
-        () => {
+    .addEventListener("click", () => {
 
-            const input =
-                document.getElementById(
-                    "guessInput"
-                );
+        const input =
+            document.getElementById("guessInput");
+
+        const letter = input.value.trim();
 
 
-            const letter =
-                input.value.trim();
+        try {
 
+            state.game.makeGuess(letter);
 
-            try {
-
-                state.game.makeGuess(
-                    letter
-                );
-
-                input.value = "";
-
-                UI.hideResult();
-
-            } catch (error) {
-
-                UI.toast(
-                    error.message
-                );
-            }
-        }
-    );
-
-
-/* ENTER TO GUESS */
-
-document
-    .getElementById("guessInput")
-    .addEventListener(
-        "keydown",
-        event => {
-
-            if (event.key === "Enter") {
-
-                document
-                    .getElementById(
-                        "guessBtn"
-                    )
-                    .click();
-            }
-        }
-    );
-
-
-/* HINT */
-
-document
-    .getElementById("hintBtn")
-    .addEventListener(
-        "click",
-        () => {
-
-            state.game?.requestHint();
-        }
-    );
-
-
-/* CLEAR HISTORY */
-
-document
-    .getElementById(
-        "clearHistoryBtn"
-    )
-    .addEventListener(
-        "click",
-        () => {
-
-            if (!state.game) {
-                return;
-            }
-
-
-            state.game.history = [];
-
-            state.game.lastResult = null;
-
+            input.value = "";
 
             UI.hideResult();
 
-            UI.renderHistory([]);
+        } catch (error) {
+
+            UI.toast(error.message);
         }
-    );
+    });
 
 
-/* LEAVE */
+/* ─── ENTER TO GUESS ───────────────────────────────────────────── */
 
 document
-    .getElementById(
-        "leaveRoomBtn"
-    )
-    .addEventListener(
-        "click",
-        () => {
+    .getElementById("guessInput")
+    .addEventListener("keydown", event => {
 
-            resetGame();
+        if (event.key === "Enter") {
+
+            document
+                .getElementById("guessBtn")
+                .click();
         }
-    );
+    });
 
 
-/* PLAY AGAIN */
+/* ─── HINT ─────────────────────────────────────────────────────── */
 
 document
-    .getElementById(
-        "playAgainBtn"
-    )
-    .addEventListener(
-        "click",
-        () => {
+    .getElementById("hintBtn")
+    .addEventListener("click", () => {
 
-            UI.hideGameOver();
+        state.game?.requestHint();
+    });
 
-            state.game?.playAgain();
-        }
-    );
 
+/* ─── CLEAR HISTORY ────────────────────────────────────────────── */
+
+document
+    .getElementById("clearHistoryBtn")
+    .addEventListener("click", () => {
+
+        if (!state.game) return;
+
+        state.game.history = [];
+
+        state.game.lastResult = null;
+
+
+        UI.hideResult();
+
+        UI.renderHistory([]);
+    });
+
+
+/* ─── LEAVE ────────────────────────────────────────────────────── */
+
+document
+    .getElementById("leaveRoomBtn")
+    .addEventListener("click", () => {
+
+        resetGame();
+    });
+
+
+/* ─── PLAY AGAIN ───────────────────────────────────────────────── */
+
+document
+    .getElementById("playAgainBtn")
+    .addEventListener("click", () => {
+
+        UI.hideGameOver();
+
+        state.game?.playAgain();
+    });
+
+
+/* ─── RESET ────────────────────────────────────────────────────── */
 
 function resetGame() {
 
     try {
-
         state.transport?.disconnect();
-
     } catch { }
 
 
@@ -534,31 +416,17 @@ function resetGame() {
     state.game = null;
 
 
-    document.getElementById(
-        "secretInput"
-    ).value = "";
+    document.getElementById("secretInput").value = "";
 
-    document.getElementById(
-        "hintInput"
-    ).value = "";
+    document.getElementById("hintInput").value = "";
 
+    document.getElementById("secretInput").disabled = false;
 
-    document.getElementById(
-        "secretInput"
-    ).disabled = false;
+    document.getElementById("hintInput").disabled = false;
 
-    document.getElementById(
-        "hintInput"
-    ).disabled = false;
+    document.getElementById("readyBtn").disabled = false;
 
-    document.getElementById(
-        "readyBtn"
-    ).disabled = false;
-
-
-    document.getElementById(
-        "guessInput"
-    ).value = "";
+    document.getElementById("guessInput").value = "";
 
 
     UI.hideGameOver();
@@ -571,16 +439,11 @@ function resetGame() {
 }
 
 
-/* CLEANUP */
+/* ─── CLEANUP ──────────────────────────────────────────────────── */
 
-window.addEventListener(
-    "beforeunload",
-    () => {
+window.addEventListener("beforeunload", () => {
 
-        try {
-
-            state.transport?.disconnect();
-
-        } catch { }
-    }
-);
+    try {
+        state.transport?.disconnect();
+    } catch { }
+});
