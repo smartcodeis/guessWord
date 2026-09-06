@@ -352,6 +352,17 @@ input::placeholder {
     font-size: 18px;
 }
 
+.score-badge {
+    margin-top: 5px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    background: rgba(108, 99, 255, 0.15);
+    color: #d3d1ff;
+    font-size: 14px;
+    font-weight: bold;
+    align-self: center;
+}
+
 .player-card.active-player {
     border-color: #6c63ff;
 }
@@ -372,6 +383,30 @@ input::placeholder {
 
 .turn-section h2 {
     margin-top: 7px;
+}
+
+/* MY WORD */
+
+.my-word-section {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+.my-word-section span {
+    display: block;
+    color: #a8adbf;
+    font-size: 13px;
+    margin-bottom: 5px;
+}
+
+.my-secret-word {
+    font-size: 24px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #00d084;
 }
 
 
@@ -700,6 +735,52 @@ input::placeholder {
 
     transform:
         translateX(-50%) translateY(0);
+}
+
+
+/* ATTEMPTS BANNER */
+
+.attempts-banner {
+    margin-bottom: 20px;
+
+    padding: 13px 18px;
+
+    border-radius: 14px;
+
+    font-size: 14px;
+
+    font-weight: 500;
+
+    text-align: center;
+
+    line-height: 1.5;
+}
+
+.attempts-banner.exhausted {
+    background: rgba(255, 100, 60, 0.12);
+
+    border: 1px solid rgba(255, 100, 60, 0.28);
+
+    color: #ff8c6e;
+}
+
+.attempts-banner.opponent-exhausted {
+    background: rgba(0, 200, 130, 0.1);
+
+    border: 1px solid rgba(0, 200, 130, 0.25);
+
+    color: #00d084;
+}
+
+
+/* GAME OVER TITLE VARIANTS */
+
+.win-title {
+    color: #00d084;
+}
+
+.lose-title {
+    color: #ff6464;
 }
 
 
