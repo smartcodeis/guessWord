@@ -1,13 +1,19 @@
+import { Storage } from "./storage.js";
+
 export class Game {
 
     constructor({
         playerId,
+        roomCode,
         send,
         onUpdate,
         onFinish
     }) {
 
         this.playerId = playerId;
+
+        // Game Code → لربط الـ Save بالـ Code
+        this.roomCode = roomCode;
 
         this.send = send;
 
@@ -41,19 +47,34 @@ export class Game {
 
         this.currentTurn = "player1";
 
+        // يُحمَّل من Storage في main.js
+        this.scores = {
+            player1: 0,
+            player2: 0
+        };
 
-        // Letters I guessed.
+        // عدد الأخطاء المتبقية لكل لاعب (من 10)
+        this.myWrongCount = 0;
+
+        this.opponentWrongCount = 0;
+
+        this.myAttemptsExhausted = false;
+
+        this.opponentAttemptsExhausted = false;
+
+
+        // Letters I guessed (for my turn — guessing opponent's word).
         this.guessedLetters = [];
 
 
-        // Letters that were wrong.
+        // Wrong letters in my guessing session.
         this.wrongLetters = [];
 
 
-        // Positions revealed by the opponent.
+        // Positions revealed by the opponent (in the opponent's word).
         this.revealedPositions = [];
 
-        // Letters revealed by the opponent (index -> letter).
+        // Letters revealed at each position.
         this.revealedLetters = {};
 
 
@@ -64,6 +85,15 @@ export class Game {
         this.lastResult = null;
 
         this.showHint = false;
+
+
+        // Track opponent's correct guesses (defender side).
+        this.opponentGuessedCorrectLetters = [];
+
+        this.iWon = false;
+        this.opponentFinished = false;
+        this.opponentWon = false;
+        this.opponentRevealedWord = null;
     }
 
 
@@ -173,6 +203,14 @@ export class Game {
         }
 
 
+        if (this.myAttemptsExhausted) {
+
+            throw new Error(
+                "You have no more attempts."
+            );
+        }
+
+
         if (this.guessedLetters.includes(letter)) {
 
             throw new Error(
@@ -261,10 +299,6 @@ export class Game {
                 this.update();
 
                 break;
-
-
-            // Hint is now LOCAL ONLY — no network message needed.
-            // The opponent's hint was already received in player-ready.
 
 
             case "play-again":
@@ -397,29 +431,36 @@ export class Game {
 
         /*
          * If all positions are revealed,
-         * the opponent wins.
+         * the opponent wins → end round immediately.
          */
 
         if (exists) {
 
-            this.trackOpponentCorrectLetter(
+            this._trackOpponentCorrectLetter(
                 letter
             );
 
-            if (this.isOpponentWordSolved()) {
-                const opponentId = this.playerId === "player1" ? "player2" : "player1";
+            if (this._isOpponentWordSolved()) {
 
-                // Opponent finished guessing our word
+                const opponentId =
+                    this.playerId === "player1"
+                        ? "player2"
+                        : "player1";
+
+                // نزيد النقطة مباشرةً في Storage
+                const newScores = Storage.incrementScore(
+                    this.roomCode,
+                    opponentId
+                );
+
+                if (newScores) {
+                    this.scores = newScores;
+                }
+
                 this.opponentFinished = true;
                 this.opponentWon = true;
-
-                // It is now my turn permanently
-                this.currentTurn = this.playerId;
-
-                this.send({
-                    type: "turn-change",
-                    player: this.playerId
-                });
+                this.gameOver = true;
+                this.iWon = false;
 
                 this.send({
                     type: "game-over",
@@ -427,15 +468,13 @@ export class Game {
                     word: this.secret
                 });
 
-                // If I am already finished, my modal needs updating
-                if (this.gameOver) {
-                    this.onFinish({
-                        won: this.iWon,
-                        opponentWon: true,
-                        myWord: this.secret,
-                        opponentWord: this.opponentRevealedWord || null
-                    });
-                }
+                this.onFinish({
+                    won: false,
+                    opponentWon: true,
+                    myWord: this.secret,
+                    opponentWord: this.opponentRevealedWord || null,
+                    scores: this.scores
+                });
 
                 this.update();
                 return;
@@ -446,17 +485,10 @@ export class Game {
 
     /*
      * Letters correctly guessed by the opponent.
-     *
-     * This is stored only on the defender's device.
+     * Stored only on the defender's device.
      */
 
-    trackOpponentCorrectLetter(letter) {
-
-        if (!this.opponentGuessedCorrectLetters) {
-
-            this.opponentGuessedCorrectLetters = [];
-        }
-
+    _trackOpponentCorrectLetter(letter) {
 
         if (
             !this.opponentGuessedCorrectLetters
@@ -470,14 +502,9 @@ export class Game {
     }
 
 
-    isOpponentWordSolved() {
+    _isOpponentWordSolved() {
 
         if (!this.secret) {
-            return false;
-        }
-
-
-        if (!this.opponentGuessedCorrectLetters) {
             return false;
         }
 
@@ -497,12 +524,6 @@ export class Game {
             this.opponentGuessedCorrectLetters
                 .includes(letter)
         );
-    }
-
-
-    getAllGuessedPositionsForWord() {
-
-        return [];
     }
 
 
@@ -527,10 +548,6 @@ export class Game {
 
         if (message.exists) {
 
-            if (!this.revealedLetters) {
-                this.revealedLetters = {};
-            }
-
             for (
                 const position of message.positions
             ) {
@@ -545,7 +562,6 @@ export class Game {
                     );
                 }
 
-                // Store the actual letter at this position
                 this.revealedLetters[position] =
                     message.letter;
             }
@@ -567,18 +583,11 @@ export class Game {
 
 
         /*
-         * Correct letter.
+         * Correct letter → wait for game-over from opponent
+         * or keep playing.
          */
 
         if (message.exists) {
-
-            /*
-             * The opponent sends game-over
-             * when this was the final letter.
-             *
-             * So here we simply wait for
-             * game-over.
-             */
 
             this.update();
 
@@ -601,51 +610,99 @@ export class Game {
             );
         }
 
+        this.myWrongCount = this.wrongLetters.length;
+
 
         if (this.wrongLetters.length >= 10) {
 
-            this.gameOver = true;
-            this.iWon = false;
+            // انتهت محاولاتي
+            this.myAttemptsExhausted = true;
 
             this.send({
                 type: "guesser-lost",
                 word: null
             });
 
-            this.onFinish({
-                won: false,
-                opponentWon: this.opponentWon,
-                myWord: this.secret,
-                opponentWord: this.opponentRevealedWord || null
-            });
+            // إذا كان الخصم أيضاً انتهت محاولاته → تعادل
+            if (this.opponentAttemptsExhausted) {
 
+                this.gameOver = true;
+                this.iWon = false;
+
+                this.onFinish({
+                    won: false,
+                    opponentWon: false,
+                    myWord: this.secret,
+                    opponentWord: this.opponentRevealedWord || null,
+                    scores: this.scores
+                });
+
+            } else {
+
+                // الخصم لم ينته بعد → ننتظر ولا نغير الدور
+                // (الدور سيُعطى للخصم من handleGuesserLost عنده)
+                this._giveTurnToOpponent();
+            }
+
+            this.update();
             return;
         }
 
-
-        this.changeTurn();
+        this._changeTurnAfterWrongGuess();
     }
 
 
-    changeTurn() {
+    /**
+     * تغيير الدور بعد خطأ عادي (لم تنتهِ المحاولات بعد).
+     */
+    _changeTurnAfterWrongGuess() {
 
-        if (this.opponentFinished) {
-            this.currentTurn = this.playerId;
-        } else {
-            this.currentTurn = this.playerId === "player1" ? "player2" : "player1";
+        const opponentId =
+            this.playerId === "player1"
+                ? "player2"
+                : "player1";
+
+        // إذا انتهت محاولات الخصم → يبقى الدور عندي
+        if (this.opponentAttemptsExhausted || this.opponentFinished) {
+
+            // الدور يبقى عندي
+            this.send({
+                type: "turn-change",
+                player: this.playerId
+            });
+
+            this.update();
+            return;
         }
 
+        // الدور ينتقل للخصم
+        this.currentTurn = opponentId;
 
         this.send({
-
             type: "turn-change",
-
-            player:
-                this.currentTurn
+            player: opponentId
         });
 
-
         this.update();
+    }
+
+
+    /**
+     * إعطاء الدور للخصم (بعد انتهاء محاولاتي).
+     */
+    _giveTurnToOpponent() {
+
+        const opponentId =
+            this.playerId === "player1"
+                ? "player2"
+                : "player1";
+
+        this.currentTurn = opponentId;
+
+        this.send({
+            type: "turn-change",
+            player: opponentId
+        });
     }
 
 
@@ -653,6 +710,16 @@ export class Game {
 
         this.gameOver = true;
         this.iWon = true;
+
+        // نزيد النقطة في Storage
+        const newScores = Storage.incrementScore(
+            this.roomCode,
+            this.playerId
+        );
+
+        if (newScores) {
+            this.scores = newScores;
+        }
 
         if (message.word) {
             this.opponentRevealedWord = message.word;
@@ -662,7 +729,8 @@ export class Game {
             won: true,
             opponentWon: this.opponentWon,
             myWord: this.secret,
-            opponentWord: this.opponentRevealedWord
+            opponentWord: this.opponentRevealedWord,
+            scores: this.scores
         });
 
         this.update();
@@ -671,27 +739,31 @@ export class Game {
 
     handleGuesserLost(message) {
 
-        this.opponentFinished = true;
-        this.opponentWon = false;
+        this.opponentAttemptsExhausted = true;
 
-        this.currentTurn = this.playerId;
+        if (this.myAttemptsExhausted) {
 
-        this.send({
-            type: "turn-change",
-            player: this.playerId
-        });
+            // كلاهما استنفد محاولاته → تعادل
+            this.gameOver = true;
+            this.opponentWon = false;
+            this.iWon = false;
 
-        this.send({
-            type: "word-reveal",
-            word: this.secret
-        });
-
-        if (this.gameOver) {
             this.onFinish({
-                won: this.iWon,
+                won: false,
                 opponentWon: false,
                 myWord: this.secret,
-                opponentWord: this.opponentRevealedWord || null
+                opponentWord: this.opponentRevealedWord || null,
+                scores: this.scores
+            });
+
+        } else {
+
+            // أنا لم أنهِ محاولاتي → أحصل على الدور
+            this.currentTurn = this.playerId;
+
+            this.send({
+                type: "turn-change",
+                player: this.playerId
             });
         }
 
@@ -704,11 +776,13 @@ export class Game {
         this.opponentRevealedWord = message.word;
 
         if (this.gameOver) {
+
             this.onFinish({
                 won: this.iWon,
                 opponentWon: this.opponentWon,
                 myWord: this.secret,
-                opponentWord: this.opponentRevealedWord
+                opponentWord: this.opponentRevealedWord,
+                scores: this.scores
             });
         }
     }
@@ -725,11 +799,9 @@ export class Game {
          * Hint is LOCAL ONLY.
          * We show the opponent's hint that was
          * already received during the ready phase.
-         * No network message is sent.
          */
 
         this.showHint = true;
-
 
         this.update();
     }
@@ -750,16 +822,6 @@ export class Game {
                 this.revealedPositions
                     .includes(i)
             ) {
-
-                /*
-                 * We need the actual character.
-                 *
-                 * It arrives safely inside the
-                 * guess-result message through
-                 * the position only, not the word.
-                 *
-                 * Therefore we store revealed letters.
-                 */
 
                 result.push(
                     this.revealedLetters?.[i] || "_"
@@ -782,6 +844,7 @@ export class Game {
 
             this.onUpdate({
 
+                // الكلمة السرية — تُرسَل دائماً (تُخفيها الواجهة عن Player2)
                 secret:
                     this.secret,
 
@@ -828,9 +891,100 @@ export class Game {
                     this.lastResult,
 
                 showHint:
-                    this.showHint
+                    this.showHint,
+
+                scores:
+                    this.scores,
+
+                myAttemptsExhausted:
+                    this.myAttemptsExhausted,
+
+                opponentAttemptsExhausted:
+                    this.opponentAttemptsExhausted,
+
+                iWon:
+                    this.iWon,
+
+                opponentWon:
+                    this.opponentWon
             });
         }
+
+
+        // حفظ تلقائي لحالة اللعبة بعد كل تحديث
+        this._autoSave();
+    }
+
+
+    /**
+     * حفظ تلقائي لحالة اللعبة في Storage.
+     * يحفظ كل شيء ما عدا `send`/`onUpdate`/`onFinish`.
+     */
+    _autoSave() {
+
+        if (!this.roomCode) return;
+
+        const snapshot = {
+            secret: this.secret,
+            hint: this.hint,
+            opponentWordLength: this.opponentWordLength,
+            opponentHint: this.opponentHint,
+            myReady: this.myReady,
+            opponentReady: this.opponentReady,
+            gameStarted: this.gameStarted,
+            gameOver: this.gameOver,
+            currentTurn: this.currentTurn,
+            guessedLetters: this.guessedLetters,
+            wrongLetters: this.wrongLetters,
+            revealedPositions: this.revealedPositions,
+            revealedLetters: this.revealedLetters || {},
+            history: this.history,
+            showHint: this.showHint,
+            myAttemptsExhausted: this.myAttemptsExhausted,
+            opponentAttemptsExhausted: this.opponentAttemptsExhausted,
+            opponentGuessedCorrectLetters: this.opponentGuessedCorrectLetters,
+            iWon: this.iWon,
+            opponentFinished: this.opponentFinished,
+            opponentWon: this.opponentWon,
+            opponentRevealedWord: this.opponentRevealedWord
+        };
+
+        Storage.saveGameState(this.roomCode, snapshot);
+    }
+
+
+    /**
+     * يستعيد حالة اللعبة من snapshot محفوظ.
+     */
+    restoreState(snapshot) {
+
+        if (!snapshot) return;
+
+
+        this.secret = snapshot.secret ?? null;
+        this.hint = snapshot.hint ?? "";
+        this.opponentWordLength = snapshot.opponentWordLength ?? 0;
+        this.opponentHint = snapshot.opponentHint ?? "";
+        this.myReady = snapshot.myReady ?? false;
+        this.opponentReady = snapshot.opponentReady ?? false;
+        this.gameStarted = snapshot.gameStarted ?? false;
+        this.gameOver = snapshot.gameOver ?? false;
+        this.currentTurn = snapshot.currentTurn ?? "player1";
+        this.guessedLetters = snapshot.guessedLetters ?? [];
+        this.wrongLetters = snapshot.wrongLetters ?? [];
+        this.revealedPositions = snapshot.revealedPositions ?? [];
+        this.revealedLetters = snapshot.revealedLetters ?? {};
+        this.history = snapshot.history ?? [];
+        this.showHint = snapshot.showHint ?? false;
+        this.myAttemptsExhausted = snapshot.myAttemptsExhausted ?? false;
+        this.opponentAttemptsExhausted = snapshot.opponentAttemptsExhausted ?? false;
+        this.opponentGuessedCorrectLetters = snapshot.opponentGuessedCorrectLetters ?? [];
+        this.iWon = snapshot.iWon ?? false;
+        this.opponentFinished = snapshot.opponentFinished ?? false;
+        this.opponentWon = snapshot.opponentWon ?? false;
+        this.opponentRevealedWord = snapshot.opponentRevealedWord ?? null;
+
+        this.update();
     }
 
 
@@ -846,44 +1000,37 @@ export class Game {
 
     resetForRematch() {
 
+        // الـ Scores تُبقى كما هي (تُدار في Storage)
+        // نمسح فقط حالة الجولة الحالية
+
         this.secret = null;
-
         this.hint = "";
-
         this.opponentWordLength = 0;
-
         this.opponentHint = "";
-
         this.myReady = false;
-
         this.opponentReady = false;
-
         this.gameStarted = false;
-
         this.gameOver = false;
-
         this.currentTurn = "player1";
-
         this.guessedLetters = [];
-
         this.wrongLetters = [];
-
         this.revealedPositions = [];
-
         this.revealedLetters = {};
-
         this.history = [];
-
         this.lastResult = null;
-
         this.showHint = false;
-
         this.opponentGuessedCorrectLetters = [];
-
         this.iWon = false;
         this.opponentFinished = false;
         this.opponentWon = false;
         this.opponentRevealedWord = null;
+        this.myAttemptsExhausted = false;
+        this.opponentAttemptsExhausted = false;
+
+        // امسح حالة اللعبة من Storage (لكن أبقِ الـ Scores)
+        if (this.roomCode) {
+            Storage.clearGameState(this.roomCode);
+        }
 
         this.update();
     }
