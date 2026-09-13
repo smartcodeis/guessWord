@@ -34,10 +34,10 @@ function createTransport() {
             state._wasConnected = true;
             UI.setConnectionBadge("connected", "Connected");
             UI.setRoomStatus("Opponent connected!");
+            // دايماً نفتح الـ readyPanel (سواء أول اتصال أو reconnect)
+            UI.showReadyPanel();
             if (wasReconnecting) {
                 UI.toast("Reconnected ✓");
-            } else {
-                UI.showReadyPanel();
             }
             _tryRestoreGameState();
         },
@@ -57,6 +57,7 @@ function createTransport() {
         }
     });
 }
+
 function _tryRestoreGameState() {
     if (!state.game || !state.roomCode) return;
     const savedState = Storage.loadGameState(state.roomCode);
@@ -87,6 +88,10 @@ function renderGameState(gameState) {
         }
     } else {
         UI.showScreen("roomScreen");
+        // لو الاتصال شغال نفتح الـ readyPanel تلقائياً
+        if (state.transport?.connection?.open) {
+            UI.showReadyPanel();
+        }
         const secretInput =
             document.getElementById("secretInput");
         const hintInput =
@@ -163,10 +168,17 @@ document
         const hint = hintInput.value.trim();
         try {
             state.game.setSecretWord(word, hint);
+            // فيدباك واضح للمستخدم
+            if (!state.game.opponentReady) {
+                UI.toast("✅ You're ready! Waiting for opponent...");
+            } else {
+                UI.toast("✅ Both ready — starting game!");
+            }
         } catch (error) {
             UI.toast(error.message);
         }
     });
+
 document
     .getElementById("guessBtn")
     .addEventListener("click", () => {
