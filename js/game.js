@@ -167,15 +167,18 @@ export class Game {
             this.opponentReady &&
             !this.gameStarted
         ) {
+            // كلا اللاعبين يبدأون اللعبة محلياً فوراً بمجرد جاهزيتهم
+            this.gameStarted = true;
+            this.currentTurn = "player1";
+            
+            // Player 1 فقط هو اللي بيبعت رسالة البداية كنوع من التأكيد
             if (this.playerId === "player1") {
-                this.gameStarted = true;
-                this.currentTurn = "player1";
                 this.send({
                     type: "game-start",
                     firstTurn: "player1"
                 });
-                this.update();
             }
+            this.update();
         }
     }
     handleOpponentGuess(letter) {
